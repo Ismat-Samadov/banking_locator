@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Find nearby banks, ATMs, and banking services based on your current location">
+    <meta name="keywords" content="banking locator, ATM finder, bank branches, location-based banking">
+    <title>Banking Locator - Find Banks & ATMs Near You</title>
+    
+    <!-- Favicon -->
+    <link rel="apple-touch-icon" sizes="57x57" href="{{ url_for('static', filename='favicon/apple-icon-57x57.png') }}">
+    <link rel="apple-touch-icon" sizes="60x60" href="{{ url_for('static', filename='favicon/apple-icon-60x60.png') }}">
+    <link rel="apple-touch-icon" sizes="72x72" href="{{ url_for('static', filename='favicon/apple-icon-72x72.png') }}">
+    <link rel="apple-touch-icon" sizes="76x76" href="{{ url_for('static', filename='favicon/apple-icon-76x76.png') }}">
+    <link rel="apple-touch-icon" sizes="114x114" href="{{ url_for('static', filename='favicon/apple-icon-114x114.png') }}">
+    <link rel="apple-touch-icon" sizes="120x120" href="{{ url_for('static', filename='favicon/apple-icon-120x120.png') }}">
+    <link rel="apple-touch-icon" sizes="144x144" href="{{ url_for('static', filename='favicon/apple-icon-144x144.png') }}">
+    <link rel="apple-touch-icon" sizes="152x152" href="{{ url_for('static', filename='favicon/apple-icon-152x152.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='favicon/apple-icon-180x180.png') }}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='favicon/android-icon-192x192.png') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon/favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="96x96" href="{{ url_for('static', filename='favicon/favicon-96x96.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon/favicon-16x16.png') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='favicon/manifest.json') }}">
+    <meta name="msapplication-TileColor" content="#ffffff">
+    <meta name="msapplication-TileImage" content="{{ url_for('static', filename='favicon/ms-icon-144x144.png') }}">
+    <meta name="theme-color" content="#ffffff">
+    
+    <!-- Leaflet CSS for maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="container">
+                <div class="header-content">
+                    <div class="logo">
+                        <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                            <circle cx="12" cy="8" r="3"/>
+                        </svg>
+                        <h1>Banking Locator</h1>
+                    </div>
+                    <nav class="nav">
+                        <button id="refresh-location" class="nav-btn" title="Refresh Location">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                        </button>
+                        <button id="toggle-view" class="nav-btn" title="Toggle List/Map View">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 002 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h2a2 2 0 002-2"/>
+                            </svg>
+                        </button>
+                    </nav>
+                </div>
+            </div>
+        </header>
+
+        <!-- Location Status Bar -->
+        <div class="location-status" id="location-status">
+            <div class="container">
+                <div class="status-content">
+                    <div class="status-info">
+                        <span class="status-dot" id="status-dot"></span>
+                        <span id="location-text">Getting your location...</span>
+                    </div>
+                    <button id="enable-location" class="enable-btn" style="display: none;">
+                        Enable Location
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="container">
+                <!-- Filters -->
+                <div class="filters-section">
+                    <div class="filters">
+                        <div class="filter-group">
+                            <label for="location-type">Type:</label>
+                            <select id="location-type" class="filter-select">
+                                <option value="all">All Services</option>
+                                <option value="bank">Banks Only</option>
+                                <option value="atm">ATMs Only</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="search-radius">Radius:</label>
+                            <select id="search-radius" class="filter-select">
+                                <option value="5">5 km</option>
+                                <option value="10" selected>10 km</option>
+                                <option value="25">25 km</option>
+                                <option value="50">50 km</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <button id="apply-filters" class="apply-btn">Apply Filters</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Content Area -->
+                <div class="content-area">
+                    <!-- Map View -->
+                    <div class="map-container" id="map-container">
+                        <div id="map" class="map"></div>
+                        <div class="map-controls">
+                            <button id="locate-me" class="map-control-btn" title="Center on my location">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <circle cx="12" cy="12" r="3"/>
+                                    <path d="m12 1 0 6m0 6 0 6M1 12l6 0m6 0 6 0"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- List View -->
+                    <div class="list-container" id="list-container" style="display: none;">
+                        <div class="results-header">
+                            <h2>Nearby Banking Services</h2>
+                            <span id="results-count" class="results-count">0 results</span>
+                        </div>
+                        <div id="banking-list" class="banking-list">
+                            <!-- Banking locations will be inserted here -->
+                        </div>
+                    </div>
+
+                    <!-- Info Panel -->
+                    <div class="info-panel" id="info-panel">
+                        <div class="panel-header">
+                            <h3>Your Location</h3>
+                            <button id="close-panel" class="close-btn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="panel-content">
+                            <div id="location-details" class="location-details">
+                                <!-- Location details will be inserted here -->
+                            </div>
+                            
+                            <!-- Exchange Rates -->
+                            <div class="exchange-rates" id="exchange-rates" style="display: none;">
+                                <h4>Exchange Rates</h4>
+                                <div id="rates-list" class="rates-list">
+                                    <!-- Exchange rates will be inserted here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay" id="loading-overlay">
+            <div class="loading-spinner">
+                <div class="spinner"></div>
+                <p>Finding banking services near you...</p>
+            </div>
+        </div>
+
+        <!-- Error Modal -->
+        <div class="modal" id="error-modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Location Error</h3>
+                    <button id="close-error" class="close-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p id="error-message">Unable to get your location. Please enable location services and try again.</p>
+                </div>
+                <div class="modal-footer">
+                    <button id="retry-location" class="primary-btn">Try Again</button>
+                    <button id="manual-location" class="secondary-btn">Enter Location Manually</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
