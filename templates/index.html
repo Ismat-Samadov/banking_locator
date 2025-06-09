@@ -3,228 +3,133 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="AI-powered banking assistant with location services. Find nearby banks and ATMs, get banking advice, and access financial guidance.">
-    <meta name="keywords" content="banking assistant, AI banking, find banks, ATM locator, financial help, banking services, digital banking">
-    <meta name="author" content="Banking Assistant">
+    <title>Banking Services Locator</title>
     
-    <!-- Open Graph / Facebook -->
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="{{ request.url }}">
-    <meta property="og:title" content="AI Banking Assistant - Find Banks & Get Financial Guidance">
-    <meta property="og:description" content="AI-powered banking assistant with location services to find nearby banks and ATMs. Get instant financial guidance and banking advice.">
-    <meta property="og:image" content="{{ url_for('static', filename='favicon_io/android-chrome-512x512.png') }}">
-
-    <!-- Twitter -->
-    <meta property="twitter:card" content="summary_large_image">
-    <meta property="twitter:url" content="{{ request.url }}">
-    <meta property="twitter:title" content="AI Banking Assistant with Location Services">
-    <meta property="twitter:description" content="Find nearby banks and ATMs with AI-powered assistance">
-    <meta property="twitter:image" content="{{ url_for('static', filename='favicon_io/android-chrome-512x512.png') }}">
-
     <!-- Favicon -->
-    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='favicon_io/apple-touch-icon.png') }}">
-    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon_io/favicon-32x32.png') }}">
-    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon_io/favicon-16x16.png') }}">
-    <link rel="manifest" href="{{ url_for('static', filename='favicon_io/site.webmanifest') }}">
-
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-
-    <!-- PWA -->
-    <meta name="theme-color" content="#ffffff">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="Banking Assistant">
-
+    <link rel="apple-touch-icon" sizes="57x57" href="{{ url_for('static', filename='favicon/apple-icon-57x57.png') }}">
+    <link rel="apple-touch-icon" sizes="60x60" href="{{ url_for('static', filename='favicon/apple-icon-60x60.png') }}">
+    <link rel="apple-touch-icon" sizes="72x72" href="{{ url_for('static', filename='favicon/apple-icon-72x72.png') }}">
+    <link rel="apple-touch-icon" sizes="76x76" href="{{ url_for('static', filename='favicon/apple-icon-76x76.png') }}">
+    <link rel="apple-touch-icon" sizes="114x114" href="{{ url_for('static', filename='favicon/apple-icon-114x114.png') }}">
+    <link rel="apple-touch-icon" sizes="120x120" href="{{ url_for('static', filename='favicon/apple-icon-120x120.png') }}">
+    <link rel="apple-touch-icon" sizes="144x144" href="{{ url_for('static', filename='favicon/apple-icon-144x144.png') }}">
+    <link rel="apple-touch-icon" sizes="152x152" href="{{ url_for('static', filename='favicon/apple-icon-152x152.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='favicon/apple-icon-180x180.png') }}">
+    <link rel="icon" type="image/png" sizes="192x192"  href="{{ url_for('static', filename='favicon/android-icon-192x192.png') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon/favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="96x96" href="{{ url_for('static', filename='favicon/favicon-96x96.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon/favicon-16x16.png') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='favicon/manifest.json') }}">
+    
     <!-- CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-
-    <title>AI Banking Assistant - Find Banks & Get Financial Guidance</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 </head>
 <body>
-    <div class="app-container">
-        <!-- Header -->
-        <header class="app-header">
-            <div class="header-content">
-                <div class="brand">
-                    <div class="logo-container">
-                        <svg class="logo" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                        </svg>
-                    </div>
-                    <div class="brand-text">
-                        <h1>Banking Assistant</h1>
-                        <p class="tagline">AI-Powered Financial Guide</p>
-                    </div>
-                </div>
-                <div class="header-actions">
-                    <button id="location-btn" class="icon-btn" title="Update Location" aria-label="Update your location" style="display: none;">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                    </button>
-                    <button id="install-app" class="icon-btn" title="Install App" aria-label="Install as app" style="display: none;">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                        </svg>
-                    </button>
-                    <button id="share-app" class="icon-btn" title="Share" aria-label="Share app">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m9.632 8.048c.5.5.5 1.309 0 1.809a1.279 1.279 0 01-1.809 0L15.5 18.5m3.006 3.006L15.5 18.5m0 0l-3.006 3.006m3.006-3.006l3.006-3.006M12 15l3.506 3.506M6.75 9.5a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0z" />
-                        </svg>
-                    </button>
-                    <button id="clear-chat" class="icon-btn" title="Clear Chat" aria-label="Clear chat history">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                    </button>
-                </div>
-            </div>
+    <div class="container">
+        <header>
+            <h1>🏦 Banking Services Locator</h1>
+            <p>Find the nearest banks, ATMs, and financial services around you</p>
         </header>
 
-        <!-- Quick Actions Bar -->
-        <div class="quick-actions-bar">
-            <div class="quick-actions-content">
-                <button class="quick-action-btn" data-action="help">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span>Help & FAQ</span>
+        <div class="controls">
+            <div class="control-group">
+                <label for="serviceType">Service Type:</label>
+                <select id="serviceType">
+                    <option value="all">All Services</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="radius">Search Radius:</label>
+                <select id="radius">
+                    <option value="1">1 km</option>
+                    <option value="2">2 km</option>
+                    <option value="5" selected>5 km</option>
+                    <option value="10">10 km</option>
+                    <option value="20">20 km</option>
+                    <option value="50">50 km</option>
+                </select>
+            </div>
+            
+            <div class="button-group">
+                <button id="findNearby" class="btn-primary">
+                    <span class="btn-icon">📍</span>
+                    Find Nearby Services
+                </button>
+                
+                <button id="refreshLocation" class="btn-secondary">
+                    <span class="btn-icon">🔄</span>
+                    Refresh Location
                 </button>
             </div>
         </div>
 
-        <!-- Chat Container -->
-        <div class="chat-container">
-            <div id="chat-messages" class="chat-messages">
-                <!-- Messages will be inserted here by JavaScript -->
+        <div class="status" id="status">
+            Welcome! Allow location access to find nearby banking services
+        </div>
+
+        <div class="content">
+            <div class="map-section">
+                <div class="map-header">
+                    <h3>📍 Map View</h3>
+                    <div class="map-legend">
+                        <span class="legend-item">🏧 ATM</span>
+                        <span class="legend-item">🏦 Branch</span>
+                        <span class="legend-item">💻 Digital</span>
+                        <span class="legend-item">💰 Cash-in</span>
+                    </div>
+                </div>
+                <div class="map-container">
+                    <div id="map"></div>
+                </div>
+            </div>
+            
+            <div class="results-section">
+                <div class="results-header">
+                    <h3>📋 Nearby Services</h3>
+                    <span id="resultsCount" class="results-count">0 locations found</span>
+                </div>
+                <div id="results" class="results-list">
+                    <div class="welcome-message">
+                        <div class="welcome-icon">🎯</div>
+                        <h4>Get Started</h4>
+                        <p>Click "Find Nearby Services" to discover banking locations around you.</p>
+                        <div class="features">
+                            <div class="feature">✨ Real-time location detection</div>
+                            <div class="feature">🔍 Filter by service type</div>
+                            <div class="feature">📏 Adjustable search radius</div>
+                            <div class="feature">🗺️ Interactive map navigation</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Chat Input -->
-        <div class="chat-input-container">
-            <form id="chat-form" class="chat-form">
-                <div class="input-wrapper">
-                    <textarea 
-                        id="message-input" 
-                        class="message-input" 
-                        placeholder="Ask me about banking or find nearby services..."
-                        rows="1"
-                        aria-label="Type your banking question here"
-                        required
-                    ></textarea>
-                    <button 
-                        id="send-button" 
-                        type="submit" 
-                        class="send-button"
-                        aria-label="Send message"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                        </svg>
-                    </button>
-                </div>
-                <div class="input-info">
-                    <div class="connection-status">
-                        <span class="status-dot"></span>
-                        <span>Connected</span>
-                    </div>
-                    <div class="location-status">
-                        <span class="status-dot"></span>
-                        <span>Location unavailable</span>
-                    </div>
-                    <div class="input-hint">
-                        Press Enter to send, Shift+Enter for new line
-                    </div>
-                </div>
-            </form>
-        </div>
+        <footer>
+            <p>Banking Services Locator - Find your nearest financial services</p>
+        </footer>
     </div>
 
     <!-- Loading Overlay -->
-    <div class="loading-overlay" id="loading-overlay">
-        <div class="loading-spinner"></div>
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <p>Finding nearby services...</p>
+            <div class="loading-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
     </div>
 
-    <!-- JavaScript -->
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
-
-    <!-- JSON-LD Structured Data -->
-    <script type="application/ld+json">
-    {
-        "@context": "https://schema.org",
-        "@type": "WebApplication",
-        "name": "AI Banking Assistant",
-        "description": "AI-powered banking assistant with location services to find nearby banks and ATMs. Get instant financial guidance and banking advice.",
-        "url": "{{ request.url_root }}",
-        "applicationCategory": "FinanceApplication",
-        "operatingSystem": "Any",
-        "offers": {
-            "@type": "Offer",
-            "price": "0",
-            "priceCurrency": "USD"
-        },
-        "featureList": [
-            "AI-powered banking assistance",
-            "Location-based bank and ATM finder",
-            "Account information and guidance",
-            "Loan and savings advice",
-            "Digital banking support",
-            "Security tips and best practices",
-            "Financial education",
-            "Real-time location services"
-        ],
-        "inLanguage": "en",
-        "geo": {
-            "@type": "GeoCircle",
-            "geoMidpoint": {
-                "@type": "GeoCoordinates",
-                "latitude": 40.4093,
-                "longitude": 49.8671
-            },
-            "geoRadius": "100000"
-        }
-    }
-    </script>
 </body>
-</html>="quick-action-btn" data-action="find-nearby">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    <span>Find Nearby</span>
-                </button>
-                <button class="quick-action-btn" data-action="account-types">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                    </svg>
-                    <span>Account Types</span>
-                </button>
-                <button class="quick-action-btn" data-action="loans">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                    </svg>
-                    <span>Loans</span>
-                </button>
-                <button class="quick-action-btn" data-action="savings">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
-                    <span>Savings</span>
-                </button>
-                <button class="quick-action-btn" data-action="digital-banking">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                    </svg>
-                    <span>Digital Banking</span>
-                </button>
-                <button class="quick-action-btn" data-action="security">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                    </svg>
-                    <span>Security</span>
-                </button>
-                <button class
+</html>
