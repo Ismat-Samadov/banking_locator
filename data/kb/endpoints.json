@@ -29,12 +29,6 @@
             "company": "",
             "description": "Retrieves a list of  payment terminals for bill payments and other transactions.",
             "url": "https://www.kapitalbank.az/locations/region?is_nfc=false&weekend=false&type=payment_terminal"
-        },
-        {
-            "name": "Central bank currency rates",
-            "company": "Central Bank of Azerbaijan",
-            "description": "Provides daily exchange rates from the Central Bank of Azerbaijan in XML format.",
-            "url": "https://www.cbar.az/currencies/05.06.2025.xml"
         }
     ]
 }
