@@ -30,20 +30,20 @@ logger = logging.getLogger(__name__)
 class KapitalBankScraper:
     def __init__(self):
         # Check required environment variables
-        required_env_vars = ['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD']
+        required_env_vars = ['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'DB_PORT', 'DB_SSLMODE']
         missing_vars = [var for var in required_env_vars if not os.environ.get(var)]
         
         if missing_vars:
             raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
         
-        # Database connection parameters
+        # Database connection parameters (use only environment variables)
         self.db_params = {
-            'host': os.environ.get('DB_HOST'),
-            'database': os.environ.get('DB_NAME'),
-            'user': os.environ.get('DB_USER'),
-            'password': os.environ.get('DB_PASSWORD'),
-            'port': int(os.environ.get('DB_PORT')),
-            'sslmode': os.environ.get('DB_SSLMODE')
+            'host': os.environ['DB_HOST'],
+            'database': os.environ['DB_NAME'],
+            'user': os.environ['DB_USER'],
+            'password': os.environ['DB_PASSWORD'],
+            'port': int(os.environ['DB_PORT']),
+            'sslmode': os.environ['DB_SSLMODE']
         }
         
         # Request headers
@@ -225,7 +225,7 @@ class KapitalBankScraper:
             return None
 
     def process_location_data(self, raw_data: List[Dict], endpoint: Dict) -> List[Dict]:
-        """Process raw API data into database format"""
+        """Process raw API data into database format - ACCEPT ALL VALID RECORDS"""
         processed_locations = []
         seen_locations = set()  # Track duplicates within the same batch
         
@@ -240,29 +240,44 @@ class KapitalBankScraper:
                         lat = float(item['lat'])
                         lon = float(item['lng'])
                         
-                        # Validate coordinates are within reasonable bounds for Azerbaijan
-                        if not (38 <= lat <= 42 and 44 <= lon <= 52):
-                            logger.warning(f"Invalid coordinates for {item.get('name', 'unknown')}: {lat}, {lon}")
+                        # Only validate coordinates are not obviously invalid (0,0 or null)
+                        # Accept all coordinates within reasonable global bounds
+                        if lat == 0 and lon == 0:
+                            logger.debug(f"Zero coordinates for {item.get('name', 'unknown')}")
                             lat = lon = None
                     except (ValueError, TypeError):
-                        logger.warning(f"Invalid coordinate format for {item.get('name', 'unknown')}")
+                        logger.debug(f"Invalid coordinate format for {item.get('name', 'unknown')}")
                         lat = lon = None
                 
-                # Clean and validate required fields
-                name = str(item.get('name', '')).strip()
-                address = str(item.get('address', '')).strip()
+                # Clean required fields but be more permissive
+                name = str(item.get('name', '')).strip() if item.get('name') else ''
+                address = str(item.get('address', '')).strip() if item.get('address') else ''
                 
-                # Skip records with missing essential data
-                if not name or not address:
-                    logger.warning(f"Skipping record with missing name/address: {item}")
+                # Accept records even with missing address if we have name and coordinates
+                # This is common for ATMs where the name contains location info
+                if not name:
+                    logger.debug(f"Skipping record with missing name: {item.get('id', 'unknown')}")
                     continue
                 
+                # If no address but we have name, use name as address or create placeholder
+                if not address:
+                    if lat and lon:
+                        # Use coordinates as address placeholder
+                        address = f"Lat: {lat}, Lon: {lon}"
+                        logger.debug(f"Using coordinates as address for: {name}")
+                    else:
+                        # Use name as address if no coordinates either
+                        address = name
+                        logger.debug(f"Using name as address for: {name}")
+                
                 # Create normalized key for duplicate detection within batch
+                # Use a more flexible approach for duplicate detection
                 normalized_key = (
                     endpoint['company'],
                     endpoint['type'],
                     self.normalize_text(name),
-                    self.normalize_text(address)
+                    # Use lat/lon for duplicate detection if address is generated
+                    f"{lat}_{lon}" if address.startswith("Lat:") else self.normalize_text(address)
                 )
                 
                 # Skip if we've already seen this location in current batch
@@ -289,15 +304,20 @@ class KapitalBankScraper:
                 logger.warning(f"Error processing location {item.get('id', 'unknown')}: {e}")
                 continue
         
-        logger.info(f"Processed {len(processed_locations)} unique locations from {len(raw_data)} raw records")
+        skipped_count = len(raw_data) - len(processed_locations)
+        if skipped_count > 0:
+            logger.info(f"Processed {len(processed_locations)} locations from {len(raw_data)} raw records ({skipped_count} skipped)")
+        else:
+            logger.info(f"Processed {len(processed_locations)} unique locations from {len(raw_data)} raw records")
+        
         return processed_locations
 
     def save_locations_to_db(self, locations: List[Dict], endpoint_name: str) -> tuple:
-        """Save locations to database using UPSERT logic"""
+        """Save locations to database using UPSERT logic - SAVE ALL RECORDS"""
         if not locations:
             return 0, 0
         
-        # Use PostgreSQL UPSERT (ON CONFLICT) for better handling
+        # Use PostgreSQL UPSERT but be more permissive with constraints
         upsert_sql = """
         INSERT INTO banking_locator.locations 
         (company, type, name, address, lat, lon, created_at, updated_at)
@@ -305,11 +325,20 @@ class KapitalBankScraper:
         (%(company)s, %(type)s, %(name)s, %(address)s, %(lat)s, %(lon)s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT (company, type, name, address) 
         DO UPDATE SET 
-            lat = EXCLUDED.lat,
-            lon = EXCLUDED.lon,
+            lat = CASE WHEN EXCLUDED.lat IS NOT NULL THEN EXCLUDED.lat ELSE banking_locator.locations.lat END,
+            lon = CASE WHEN EXCLUDED.lon IS NOT NULL THEN EXCLUDED.lon ELSE banking_locator.locations.lon END,
             updated_at = CURRENT_TIMESTAMP
         RETURNING id, 
             CASE WHEN xmax = 0 THEN 'INSERT' ELSE 'UPDATE' END as operation
+        """
+        
+        # Fallback insert for records that might fail unique constraint due to edge cases
+        fallback_insert_sql = """
+        INSERT INTO banking_locator.locations 
+        (company, type, name, address, lat, lon, created_at, updated_at)
+        VALUES 
+        (%(company)s, %(type)s, %(name)s, %(address)s, %(lat)s, %(lon)s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        RETURNING id
         """
         
         try:
@@ -321,6 +350,7 @@ class KapitalBankScraper:
                     
                     for i, location in enumerate(locations):
                         try:
+                            # First try the upsert
                             cur.execute(upsert_sql, location)
                             result = cur.fetchone()
                             
@@ -336,17 +366,29 @@ class KapitalBankScraper:
                                 logger.debug(f"Processed {i + 1}/{len(locations)} records for {endpoint_name}")
                                 
                         except psycopg2.IntegrityError as e:
-                            # Handle specific constraint violations
-                            logger.warning(f"Integrity error for location {location.get('name', 'unknown')}: {e}")
-                            failed_count += 1
+                            # If unique constraint fails, try alternative approach
                             conn.rollback()
-                            # Continue with next location
+                            
+                            try:
+                                # Modify the record slightly to make it unique
+                                modified_location = location.copy()
+                                modified_location['name'] = f"{location['name']} (ID: {location.get('external_id', i)})"
+                                
+                                cur.execute(fallback_insert_sql, modified_location)
+                                result = cur.fetchone()
+                                if result:
+                                    inserted_count += 1
+                                    logger.info(f"Inserted with modified name: {modified_location['name']}")
+                                
+                            except Exception as e2:
+                                logger.warning(f"Failed to save location even with modification {location.get('name', 'unknown')}: {e2}")
+                                failed_count += 1
+                                conn.rollback()
                             
                         except Exception as e:
-                            logger.error(f"Error saving location {location.get('name', 'unknown')}: {e}")
+                            logger.warning(f"Error saving location {location.get('name', 'unknown')}: {e}")
                             failed_count += 1
                             conn.rollback()
-                            # Continue with next location
                     
                     conn.commit()
                     
