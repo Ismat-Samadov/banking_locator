@@ -1,0 +1,40 @@
+{
+    "endpoints": [
+        {
+            "name": "Branch locations",
+            "company": "",
+            "description": "Retrieves a list of all  branch offices, including their addresses and working hours.",
+            "url": "https://www.kapitalbank.az/locations/region?is_nfc=false&weekend=false&type=branch"
+        },
+        {
+            "name": "ATM locations",
+            "company": "",
+            "description": "Retrieves a list of all  ATMs, including their locations and availability.",
+            "url": "https://www.kapitalbank.az/locations/region?is_nfc=false&weekend=false&type=atm"
+        },
+        {
+            "name": "Cash-in machines",
+            "company": "",
+            "description": "Retrieves a list of  cash-in terminals, where customers can deposit cash.",
+            "url": "https://www.kapitalbank.az/locations/region?is_nfc=false&weekend=false&type=cash_in"
+        },
+        {
+            "name": "Digital centers",
+            "company": "",
+            "description": "Retrieves a list of  digital service centers, offering self-service banking and digital support.",
+            "url": "https://www.kapitalbank.az/locations/region?is_nfc=false&weekend=false&type=reqemsal-merkez"
+        },
+        {
+            "name": "Payment terminals",
+            "company": "",
+            "description": "Retrieves a list of  payment terminals for bill payments and other transactions.",
+            "url": "https://www.kapitalbank.az/locations/region?is_nfc=false&weekend=false&type=payment_terminal"
+        },
+        {
+            "name": "Central bank currency rates",
+            "company": "Central Bank of Azerbaijan",
+            "description": "Provides daily exchange rates from the Central Bank of Azerbaijan in XML format.",
+            "url": "https://www.cbar.az/currencies/05.06.2025.xml"
+        }
+    ]
+}
