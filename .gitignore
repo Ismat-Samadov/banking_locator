@@ -1,3 +1,8 @@
+# .gitignore for Python projects
+# This file is a template for Python projects. It is recommended to
+# customize it according to your project's needs.
+# For more information, see https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+.DS_Store
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
