@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Kapital Bank Location Scraper
+Kapital Bank Location Scraper - FIXED VERSION
 Scrapes location data from Kapital Bank API endpoints and saves to PostgreSQL database
+Fixes duplicate detection and handles upsert logic properly
 """
 
 import os
@@ -14,6 +15,7 @@ import time
 import logging
 from typing import List, Dict, Optional
 from dotenv import load_dotenv
+import re
 
 # Load environment variables from .env file
 load_dotenv()
@@ -40,11 +42,11 @@ class KapitalBankScraper:
             'database': os.environ.get('DB_NAME'),
             'user': os.environ.get('DB_USER'),
             'password': os.environ.get('DB_PASSWORD'),
-            'port': int(os.environ.get('DB_PORT', '5432')),
-            'sslmode': os.environ.get('DB_SSLMODE', 'require')
+            'port': int(os.environ.get('DB_PORT')),
+            'sslmode': os.environ.get('DB_SSLMODE')
         }
         
-        # Request headers based on the provided headers.json
+        # Request headers
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
             'Accept': '*/*',
@@ -100,6 +102,22 @@ class KapitalBankScraper:
             }
         ]
 
+    def normalize_text(self, text: str) -> str:
+        """Normalize text for better duplicate detection"""
+        if not text:
+            return ""
+        
+        # Convert to lowercase and strip whitespace
+        text = text.lower().strip()
+        
+        # Remove extra whitespace
+        text = re.sub(r'\s+', ' ', text)
+        
+        # Remove common punctuation that might vary
+        text = re.sub(r'[.,;:!?()"\'-]', '', text)
+        
+        return text
+
     def get_db_connection(self):
         """Establish database connection"""
         try:
@@ -153,6 +171,33 @@ class KapitalBankScraper:
             logger.error(f"Error verifying table: {e}")
             raise
 
+    def ensure_unique_constraint(self):
+        """Ensure unique constraint exists to prevent duplicates"""
+        try:
+            with self.get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    # Check if unique constraint exists
+                    cur.execute("""
+                        SELECT COUNT(*) FROM pg_constraint 
+                        WHERE conrelid = 'banking_locator.locations'::regclass
+                        AND conname = 'unique_company_type_name_address'
+                    """)
+                    
+                    if cur.fetchone()[0] == 0:
+                        logger.info("Adding unique constraint to prevent duplicates...")
+                        cur.execute("""
+                            ALTER TABLE banking_locator.locations 
+                            ADD CONSTRAINT unique_company_type_name_address 
+                            UNIQUE (company, type, name, address)
+                        """)
+                        conn.commit()
+                        logger.info("✓ Unique constraint added successfully")
+                    else:
+                        logger.info("✓ Unique constraint already exists")
+                        
+        except Exception as e:
+            logger.warning(f"Could not add unique constraint (may already exist): {e}")
+
     def fetch_endpoint_data(self, endpoint: Dict) -> Optional[List[Dict]]:
         """Fetch data from a single endpoint"""
         try:
@@ -182,23 +227,60 @@ class KapitalBankScraper:
     def process_location_data(self, raw_data: List[Dict], endpoint: Dict) -> List[Dict]:
         """Process raw API data into database format"""
         processed_locations = []
+        seen_locations = set()  # Track duplicates within the same batch
         
         for item in raw_data:
             try:
-                # Extract coordinates
-                lat = float(item.get('lat', 0)) if item.get('lat') else None
-                lon = float(item.get('lng', 0)) if item.get('lng') else None
+                # Extract and validate coordinates
+                lat = None
+                lon = None
                 
-                # Process location data for existing table structure
+                if item.get('lat') and item.get('lng'):
+                    try:
+                        lat = float(item['lat'])
+                        lon = float(item['lng'])
+                        
+                        # Validate coordinates are within reasonable bounds for Azerbaijan
+                        if not (38 <= lat <= 42 and 44 <= lon <= 52):
+                            logger.warning(f"Invalid coordinates for {item.get('name', 'unknown')}: {lat}, {lon}")
+                            lat = lon = None
+                    except (ValueError, TypeError):
+                        logger.warning(f"Invalid coordinate format for {item.get('name', 'unknown')}")
+                        lat = lon = None
+                
+                # Clean and validate required fields
+                name = str(item.get('name', '')).strip()
+                address = str(item.get('address', '')).strip()
+                
+                # Skip records with missing essential data
+                if not name or not address:
+                    logger.warning(f"Skipping record with missing name/address: {item}")
+                    continue
+                
+                # Create normalized key for duplicate detection within batch
+                normalized_key = (
+                    endpoint['company'],
+                    endpoint['type'],
+                    self.normalize_text(name),
+                    self.normalize_text(address)
+                )
+                
+                # Skip if we've already seen this location in current batch
+                if normalized_key in seen_locations:
+                    logger.debug(f"Skipping duplicate in batch: {name}")
+                    continue
+                
+                seen_locations.add(normalized_key)
+                
+                # Process location data
                 location = {
                     'company': endpoint['company'],
                     'type': endpoint['type'],
-                    'name': item.get('name', '').strip(),
-                    'address': item.get('address', '').strip(),
+                    'name': name,
+                    'address': address,
                     'lat': lat,
                     'lon': lon,
-                    # Store the external_id for duplicate checking
-                    '_external_id': str(item.get('id', ''))
+                    'external_id': str(item.get('id', ''))  # Keep for logging
                 }
                 
                 processed_locations.append(location)
@@ -207,31 +289,27 @@ class KapitalBankScraper:
                 logger.warning(f"Error processing location {item.get('id', 'unknown')}: {e}")
                 continue
         
+        logger.info(f"Processed {len(processed_locations)} unique locations from {len(raw_data)} raw records")
         return processed_locations
 
-    def save_locations_to_db(self, locations: List[Dict]) -> int:
-        """Save locations to existing database table"""
+    def save_locations_to_db(self, locations: List[Dict], endpoint_name: str) -> tuple:
+        """Save locations to database using UPSERT logic"""
         if not locations:
-            return 0
+            return 0, 0
         
-        # Since we don't have external_id column, we'll use name+address+company for duplicate detection
-        insert_sql = """
+        # Use PostgreSQL UPSERT (ON CONFLICT) for better handling
+        upsert_sql = """
         INSERT INTO banking_locator.locations 
-        (company, type, name, address, lat, lon, updated_at)
+        (company, type, name, address, lat, lon, created_at, updated_at)
         VALUES 
-        (%(company)s, %(type)s, %(name)s, %(address)s, %(lat)s, %(lon)s, CURRENT_TIMESTAMP)
-        """
-        
-        # Check for existing records to avoid duplicates
-        check_sql = """
-        SELECT id FROM banking_locator.locations 
-        WHERE company = %s AND type = %s AND name = %s AND address = %s
-        """
-        
-        update_sql = """
-        UPDATE banking_locator.locations 
-        SET lat = %s, lon = %s, updated_at = CURRENT_TIMESTAMP
-        WHERE id = %s
+        (%(company)s, %(type)s, %(name)s, %(address)s, %(lat)s, %(lon)s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT (company, type, name, address) 
+        DO UPDATE SET 
+            lat = EXCLUDED.lat,
+            lon = EXCLUDED.lon,
+            updated_at = CURRENT_TIMESTAMP
+        RETURNING id, 
+            CASE WHEN xmax = 0 THEN 'INSERT' ELSE 'UPDATE' END as operation
         """
         
         try:
@@ -239,50 +317,51 @@ class KapitalBankScraper:
                 with conn.cursor() as cur:
                     inserted_count = 0
                     updated_count = 0
+                    failed_count = 0
                     
-                    for location in locations:
-                        # Check if record already exists
-                        cur.execute(check_sql, (
-                            location['company'], 
-                            location['type'], 
-                            location['name'], 
-                            location['address']
-                        ))
-                        
-                        existing_record = cur.fetchone()
-                        
-                        if existing_record:
-                            # Update existing record
-                            cur.execute(update_sql, (
-                                location['lat'], 
-                                location['lon'], 
-                                existing_record[0]
-                            ))
-                            updated_count += 1
-                        else:
-                            # Insert new record
-                            cur.execute(insert_sql, location)
-                            inserted_count += 1
+                    for i, location in enumerate(locations):
+                        try:
+                            cur.execute(upsert_sql, location)
+                            result = cur.fetchone()
+                            
+                            if result:
+                                operation = result[1]
+                                if operation == 'INSERT':
+                                    inserted_count += 1
+                                else:
+                                    updated_count += 1
+                            
+                            # Progress logging for large batches
+                            if (i + 1) % 100 == 0:
+                                logger.debug(f"Processed {i + 1}/{len(locations)} records for {endpoint_name}")
+                                
+                        except psycopg2.IntegrityError as e:
+                            # Handle specific constraint violations
+                            logger.warning(f"Integrity error for location {location.get('name', 'unknown')}: {e}")
+                            failed_count += 1
+                            conn.rollback()
+                            # Continue with next location
+                            
+                        except Exception as e:
+                            logger.error(f"Error saving location {location.get('name', 'unknown')}: {e}")
+                            failed_count += 1
+                            conn.rollback()
+                            # Continue with next location
                     
                     conn.commit()
-                    total_affected = inserted_count + updated_count
                     
-                    logger.info(f"Database operation completed: {inserted_count} inserted, {updated_count} updated")
-                    return total_affected
+                    if failed_count > 0:
+                        logger.warning(f"Failed to save {failed_count} locations")
+                    
+                    logger.info(f"Database operation completed: {inserted_count} inserted, {updated_count} updated, {failed_count} failed")
+                    return inserted_count, updated_count
                     
         except Exception as e:
-            logger.error(f"Error saving locations to database: {e}")
+            logger.error(f"Error in batch save operation: {e}")
             raise
 
-    def cleanup_old_locations(self, company: str, current_locations: List[Dict]):
-        """Remove duplicate detection since we don't have external_id"""
-        # Skip cleanup since we don't have external_id to track what's current vs old
-        # This function is kept for compatibility but does nothing
-        logger.info(f"Cleanup skipped for {company} (no external_id column for tracking)")
-        pass
-
     def get_statistics(self):
-        """Get database statistics for existing table"""
+        """Get database statistics"""
         try:
             with self.get_db_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -327,7 +406,12 @@ class KapitalBankScraper:
             # Verify existing table structure
             self.verify_table_exists()
             
+            # Ensure unique constraint exists
+            self.ensure_unique_constraint()
+            
             total_processed = 0
+            total_inserted = 0
+            total_updated = 0
             
             for endpoint in self.endpoints:
                 try:
@@ -343,11 +427,10 @@ class KapitalBankScraper:
                     
                     if processed_locations:
                         # Save to database
-                        saved_count = self.save_locations_to_db(processed_locations)
-                        total_processed += saved_count
-                        
-                        # Skip cleanup since we don't have external_id
-                        self.cleanup_old_locations(endpoint['company'], processed_locations)
+                        inserted, updated = self.save_locations_to_db(processed_locations, endpoint['name'])
+                        total_inserted += inserted
+                        total_updated += updated
+                        total_processed += len(processed_locations)
                     
                     # Add delay between requests to be respectful
                     time.sleep(2)
@@ -359,7 +442,10 @@ class KapitalBankScraper:
             # Show final statistics
             self.get_statistics()
             
-            logger.info(f"Scraping completed! Total locations processed: {total_processed}")
+            logger.info(f"Scraping completed!")
+            logger.info(f"Total locations processed: {total_processed}")
+            logger.info(f"Total inserted: {total_inserted}")
+            logger.info(f"Total updated: {total_updated}")
             
         except Exception as e:
             logger.error(f"Scraper execution failed: {e}")
@@ -367,8 +453,12 @@ class KapitalBankScraper:
 
 def main():
     """Main execution function"""
-    scraper = KapitalBankScraper()
-    scraper.run_scraper()
+    try:
+        scraper = KapitalBankScraper()
+        scraper.run_scraper()
+    except Exception as e:
+        logger.error(f"Scraper failed: {e}")
+        raise
 
 if __name__ == "__main__":
     main()
