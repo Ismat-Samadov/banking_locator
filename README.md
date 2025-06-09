@@ -212,13 +212,3 @@ Future enhancement: Replace with PostGIS DB for optimized spatial queries.
 ## 📄 License
 
 MIT License © 2025 [Ismat Samadov](https://github.com/Ismat-Samadov)
-
----
-
-## 📬 Contact
-
-For questions or collaborations:
-
-* GitHub: [@Ismat-Samadov](https://github.com/Ismat-Samadov)
-* Email: `your.email@example.com`
-
